@@ -1,1 +1,9 @@
 /target
+
+# Prevent accidental commit of secrets
+client_secret*.json
+token_cache.json
+.env
+.env.*
+*.pem
+*.key

@@ -160,7 +160,48 @@ fn render_input_box(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
 }
 
 fn render_status_line(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
-    let status = if let Some(ref err) = app.error_message {
+    let status = if let Some(ref autocomplete) = app.autocomplete {
+        // Show autocomplete options
+        let mut spans = vec![Span::styled("@", Style::default().fg(Color::Gray))];
+
+        for (i, name) in autocomplete.matches.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::raw(" "));
+            }
+
+            if i == autocomplete.selected_index {
+                // Highlight selected option
+                spans.push(Span::styled(
+                    name.as_str(),
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ));
+            } else {
+                spans.push(Span::styled(
+                    name.as_str(),
+                    Style::default().fg(Color::Cyan),
+                ));
+            }
+
+            // Limit display to prevent overflow
+            if i >= 5 && autocomplete.matches.len() > 6 {
+                spans.push(Span::styled(
+                    format!(" +{}", autocomplete.matches.len() - 6),
+                    Style::default().fg(Color::DarkGray),
+                ));
+                break;
+            }
+        }
+
+        spans.push(Span::styled(
+            " | Tab: next, Space: confirm, Esc: cancel",
+            Style::default().fg(Color::DarkGray),
+        ));
+
+        Line::from(spans)
+    } else if let Some(ref err) = app.error_message {
         Line::from(Span::styled(err.as_str(), Style::default().fg(Color::Red)))
     } else if app.is_sending {
         Line::from(Span::styled("Sending...", Style::default().fg(Color::Yellow)))
