@@ -41,8 +41,14 @@ pub fn extract_video_id(url_str: &str) -> Result<String> {
     }
 }
 
-/// Get stream title and live chat ID from a video
-pub async fn get_stream_info<C>(hub: &YouTube<C>, video_id: &str) -> Result<(String, String)>
+pub struct StreamInfo {
+    pub title: String,
+    pub channel_name: String,
+    pub live_chat_id: String,
+}
+
+/// Get stream title, channel name, and live chat ID from a video
+pub async fn get_stream_info<C>(hub: &YouTube<C>, video_id: &str) -> Result<StreamInfo>
 where
     C: Connect + Clone + Send + Sync + 'static,
 {
@@ -58,17 +64,23 @@ where
         .and_then(|items| items.into_iter().next())
         .ok_or_else(|| anyhow!("Video not found"))?;
 
-    let title = video
-        .snippet
-        .and_then(|s| s.title)
-        .unwrap_or_else(|| "Unknown Stream".to_string());
+    let snippet = video.snippet.ok_or_else(|| anyhow!("No snippet data"))?;
+
+    let title = snippet.title.unwrap_or_else(|| "Unknown Stream".to_string());
+    let channel_name = snippet
+        .channel_title
+        .unwrap_or_else(|| "Unknown Channel".to_string());
 
     let live_chat_id = video
         .live_streaming_details
         .and_then(|d| d.active_live_chat_id)
         .ok_or_else(|| anyhow!("No active live chat - stream may not be live"))?;
 
-    Ok((title, live_chat_id))
+    Ok(StreamInfo {
+        title,
+        channel_name,
+        live_chat_id,
+    })
 }
 
 /// Polls YouTube live chat for new messages

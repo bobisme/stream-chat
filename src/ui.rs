@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Layout, Position},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
@@ -27,7 +27,8 @@ fn render_chat_area(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         .borders(Borders::ALL)
         .title(app.stream_title.as_str());
 
-    let inner_height = area.height.saturating_sub(2) as usize; // Account for borders
+    let inner_width = area.width.saturating_sub(2) as usize; // Account for borders
+    let inner_height = area.height.saturating_sub(2) as usize;
 
     // Build super chat rankings
     let mut super_chats: Vec<(usize, &SuperChatInfo)> = app
@@ -56,10 +57,12 @@ fn render_chat_area(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
                 }
             }
 
-            // Author name with role-based color
+            // Author name with role-based color (bold)
             spans.push(Span::styled(
                 &msg.author_name,
-                Style::default().fg(msg.author_type.color()),
+                Style::default()
+                    .fg(msg.author_type.color())
+                    .add_modifier(Modifier::BOLD),
             ));
 
             spans.push(Span::raw(": "));
@@ -69,12 +72,26 @@ fn render_chat_area(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         })
         .collect();
 
+    // Calculate wrapped line count for each message
+    let wrapped_heights: Vec<usize> = lines
+        .iter()
+        .map(|line| {
+            let line_width: usize = line.spans.iter().map(|s| s.content.chars().count()).sum();
+            if inner_width == 0 {
+                1
+            } else {
+                (line_width.max(1) + inner_width - 1) / inner_width // Ceiling division
+            }
+        })
+        .collect();
+
+    let total_wrapped_lines: usize = wrapped_heights.iter().sum();
+
     // Calculate scroll position
     // scroll_offset of 0 means "at the bottom" (newest messages visible)
     // Higher scroll_offset means showing older messages
-    let total_lines = lines.len();
-    let scroll = if total_lines > inner_height {
-        let max_scroll = total_lines.saturating_sub(inner_height);
+    let scroll = if total_wrapped_lines > inner_height {
+        let max_scroll = total_wrapped_lines.saturating_sub(inner_height);
         let effective_scroll = app.scroll_offset.min(max_scroll);
         max_scroll.saturating_sub(effective_scroll)
     } else {

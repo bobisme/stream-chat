@@ -37,10 +37,12 @@ async fn main() -> Result<()> {
 
     // 3. Get stream info (title and live chat ID)
     eprintln!("Connecting to stream...");
-    let (title, live_chat_id) = youtube::get_stream_info(&hub, &video_id).await?;
-    eprintln!("Connected to: {}", title);
+    let stream_info = youtube::get_stream_info(&hub, &video_id).await?;
+    eprintln!("Connected to: {} - {}", stream_info.channel_name, stream_info.title);
 
     // 4. Initialize app state
+    let title = format!("{} - {}", stream_info.channel_name, stream_info.title);
+    let live_chat_id = stream_info.live_chat_id;
     let mut app = App::new(title, live_chat_id.clone());
 
     // 5. Setup terminal
