@@ -1,0 +1,16 @@
+╭─Title of the Stream Goes Here────────────────────────╮
+│ [37m@chatter123[0m: this is some message that chatter123    │
+│ sent. Notice it wraps.                               │
+│ [32m@member1[0m: members are shown in green                 │
+│ [34m@mod-123[0m: mods are shown in blue                     │
+│ [37m@chatter123[0m: [45m[30m#1[0m ranked messages show a label         │
+│                                                      │
+│                                                      │
+│                                                      │
+│                                                      │
+│                                                      │
+╰──────────────────────────────────────────────────────╯
+╭─Chat Here────────────────────────────────────────────╮
+│ Input message here...                                │
+╰──────────────────────────────────────────────────────╯
+[34mQuit: ctrl+c[0m
