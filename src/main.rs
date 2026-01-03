@@ -22,6 +22,10 @@ use events::{AppEvent, EventHandler, MessageSender};
 struct Cli {
     /// YouTube video URL (must be a live stream or premiere)
     url: String,
+
+    /// Your YouTube @username for highlighting mentions (without the @)
+    #[arg(short, long)]
+    username: Option<String>,
 }
 
 #[tokio::main]
@@ -35,15 +39,19 @@ async fn main() -> Result<()> {
     eprintln!("Authenticating with YouTube...");
     let hub = auth::create_youtube_client().await?;
 
-    // 3. Get stream info (title and live chat ID)
+    // 3. Get stream info and user's handle
     eprintln!("Connecting to stream...");
     let stream_info = youtube::get_stream_info(&hub, &video_id).await?;
+    let my_username = match cli.username {
+        Some(u) => u,
+        None => youtube::get_my_handle(&hub).await.unwrap_or_default(),
+    };
     eprintln!("Connected to: {} - {}", stream_info.channel_name, stream_info.title);
 
     // 4. Initialize app state
     let title = format!("{} - {}", stream_info.channel_name, stream_info.title);
     let live_chat_id = stream_info.live_chat_id;
-    let mut app = App::new(title, live_chat_id.clone());
+    let mut app = App::new(title, live_chat_id.clone(), my_username);
 
     // 5. Setup terminal
     enable_raw_mode()?;

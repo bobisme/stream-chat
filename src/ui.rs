@@ -66,7 +66,44 @@ fn render_chat_area(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
             ));
 
             spans.push(Span::raw(": "));
-            spans.push(Span::raw(&msg.message));
+
+            // Highlight mentions of the user
+            if !app.my_username.is_empty() {
+                let mention = format!("@{}", app.my_username);
+                let mention_lower = mention.to_lowercase();
+                let msg_lower = msg.message.to_lowercase();
+
+                if msg_lower.contains(&mention_lower) {
+                    // Split message and highlight mentions
+                    let mut remaining = msg.message.as_str();
+                    let mut remaining_lower = msg_lower.as_str();
+
+                    while let Some(pos) = remaining_lower.find(&mention_lower) {
+                        // Add text before mention
+                        if pos > 0 {
+                            spans.push(Span::raw(remaining[..pos].to_string()));
+                        }
+                        // Add highlighted mention
+                        spans.push(Span::styled(
+                            remaining[pos..pos + mention.len()].to_string(),
+                            Style::default()
+                                .fg(Color::Black)
+                                .bg(Color::Yellow)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+                        remaining = &remaining[pos + mention.len()..];
+                        remaining_lower = &remaining_lower[pos + mention.len()..];
+                    }
+                    // Add remaining text
+                    if !remaining.is_empty() {
+                        spans.push(Span::raw(remaining.to_string()));
+                    }
+                } else {
+                    spans.push(Span::raw(&msg.message));
+                }
+            } else {
+                spans.push(Span::raw(&msg.message));
+            }
 
             Line::from(spans)
         })

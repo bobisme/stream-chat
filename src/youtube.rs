@@ -47,6 +47,32 @@ pub struct StreamInfo {
     pub live_chat_id: String,
 }
 
+/// Get the authenticated user's @handle (e.g., "bobnull" from "@bobnull")
+pub async fn get_my_handle<C>(hub: &YouTube<C>) -> Result<String>
+where
+    C: Connect + Clone + Send + Sync + 'static,
+{
+    let (_, response) = hub
+        .channels()
+        .list(&vec!["snippet".into()])
+        .mine(true)
+        .doit()
+        .await?;
+
+    let channel = response
+        .items
+        .and_then(|items| items.into_iter().next())
+        .ok_or_else(|| anyhow!("Could not get your channel info"))?;
+
+    let handle = channel
+        .snippet
+        .and_then(|s| s.custom_url)
+        .map(|url| url.trim_start_matches('@').to_string())
+        .ok_or_else(|| anyhow!("No handle found for your channel"))?;
+
+    Ok(handle)
+}
+
 /// Get stream title, channel name, and live chat ID from a video
 pub async fn get_stream_info<C>(hub: &YouTube<C>, video_id: &str) -> Result<StreamInfo>
 where

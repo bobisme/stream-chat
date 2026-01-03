@@ -6,6 +6,7 @@ pub struct App {
     pub stream_title: String,
     #[allow(dead_code)]
     pub live_chat_id: String,
+    pub my_username: String,
     pub messages: Vec<ChatMessage>,
     pub input: String,
     pub cursor_position: usize,
@@ -20,10 +21,11 @@ pub enum AppAction {
 }
 
 impl App {
-    pub fn new(stream_title: String, live_chat_id: String) -> Self {
+    pub fn new(stream_title: String, live_chat_id: String, my_username: String) -> Self {
         Self {
             stream_title,
             live_chat_id,
+            my_username,
             messages: Vec::new(),
             input: String::new(),
             cursor_position: 0,
