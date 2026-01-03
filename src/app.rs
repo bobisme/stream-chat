@@ -56,6 +56,39 @@ impl App {
                 None
             }
 
+            // Delete previous word (ctrl+w)
+            (KeyModifiers::CONTROL, KeyCode::Char('w')) => {
+                self.delete_word_backwards();
+                None
+            }
+
+            // Delete to beginning of line (ctrl+u)
+            (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
+                self.input.drain(..self.cursor_position);
+                self.cursor_position = 0;
+                None
+            }
+
+            // Go to beginning of line (ctrl+a)
+            (KeyModifiers::CONTROL, KeyCode::Char('a')) => {
+                self.cursor_position = 0;
+                None
+            }
+
+            // Go to end of line (ctrl+e)
+            (KeyModifiers::CONTROL, KeyCode::Char('e')) => {
+                self.cursor_position = self.input.len();
+                None
+            }
+
+            // Delete character under cursor (ctrl+d) or to end of line if at end
+            (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
+                if self.cursor_position < self.input.len() {
+                    self.input.remove(self.cursor_position);
+                }
+                None
+            }
+
             // Send message
             (_, KeyCode::Enter) => {
                 if !self.input.is_empty() && !self.is_sending {
@@ -112,6 +145,28 @@ impl App {
 
     pub fn scroll_down(&mut self, amount: usize) {
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
+    }
+
+    pub fn delete_word_backwards(&mut self) {
+        if self.cursor_position == 0 {
+            return;
+        }
+
+        // Find the start of the previous word
+        let before_cursor = &self.input[..self.cursor_position];
+
+        // Skip trailing whitespace
+        let trimmed_len = before_cursor.trim_end().len();
+
+        // Find the last whitespace before the word
+        let word_start = before_cursor[..trimmed_len]
+            .rfind(char::is_whitespace)
+            .map(|pos| pos + 1)
+            .unwrap_or(0);
+
+        // Delete from word_start to cursor
+        self.input.drain(word_start..self.cursor_position);
+        self.cursor_position = word_start;
     }
 
     pub fn add_messages(&mut self, new_messages: Vec<ChatMessage>) {
