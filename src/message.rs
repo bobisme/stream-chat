@@ -7,6 +7,8 @@ pub struct ChatMessage {
     pub author_name: String,
     pub message: String,
     pub author_type: AuthorType,
+    pub badges: Vec<Badge>,
+    #[allow(dead_code)]
     pub super_chat: Option<SuperChatInfo>,
 }
 
@@ -19,19 +21,35 @@ pub enum AuthorType {
 }
 
 impl AuthorType {
-    pub fn color(self) -> Color {
+    pub const fn color(self) -> Color {
         match self {
-            AuthorType::Owner => Color::Yellow,
-            AuthorType::Moderator => Color::Blue,
-            AuthorType::Member => Color::Green,
-            AuthorType::Regular => Color::White,
+            Self::Owner => Color::Yellow,
+            Self::Moderator => Color::Blue,
+            Self::Member => Color::Green,
+            Self::Regular => Color::DarkGray,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BadgeKind {
+    Owner,
+    Moderator,
+    Member,
+    Rank,
+    Other,
+}
+
+#[derive(Debug, Clone)]
+pub struct Badge {
+    pub text: String,
+    pub kind: BadgeKind,
 }
 
 #[derive(Debug, Clone)]
 pub struct SuperChatInfo {
     #[allow(dead_code)]
     pub amount_display: String,
+    #[allow(dead_code)]
     pub tier: u32,
 }

@@ -1,78 +1,125 @@
 mod app;
-mod auth;
 mod events;
 mod message;
 mod ui;
-mod youtube;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use crossterm::{
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
+use std::path::PathBuf;
 
 use app::{App, AppAction};
-use events::{AppEvent, EventHandler, MessageSender};
+use events::{AppEvent, EventHandler};
 
 #[derive(Parser)]
 #[command(name = "streamchat")]
 #[command(about = "Join YouTube live stream chat from your terminal")]
 struct Cli {
-    /// YouTube video URL (must be a live stream or premiere)
+    /// `YouTube` stream URL or raw 11-char video ID
     url: String,
 
-    /// Your YouTube @username for highlighting mentions (without the @)
+    /// Your `YouTube` @username for mention highlighting (without @)
     #[arg(short, long)]
     username: Option<String>,
+
+    /// Hide webview window if supported
+    #[arg(
+        long,
+        default_value_t = true,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true"
+    )]
+    headless: bool,
+
+    /// Timeout waiting for chat DOM
+    #[arg(long, default_value_t = 25)]
+    timeout: u64,
+
+    /// Verbose diagnostics to stderr
+    #[arg(long)]
+    verbose: bool,
+
+    /// Write verbose debug logs to file (recommended for TUI)
+    #[arg(long)]
+    debug_log: Option<PathBuf>,
+
+    /// Persisted webview profile directory for cookies/session
+    #[arg(long)]
+    profile_dir: Option<PathBuf>,
+
+    /// Disable profile persistence (no saved login/session)
+    #[arg(long)]
+    ephemeral: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    let debug_enabled = cli.verbose || cli.debug_log.is_some();
 
-    // 1. Parse video ID from URL
-    let video_id = youtube::extract_video_id(&cli.url)?;
+    if let Some(code) = ytchat_webview::maybe_reexec_with_linux_webview_env(debug_enabled)? {
+        std::process::exit(code);
+    }
 
-    // 2. Initialize OAuth and create YouTube client
-    eprintln!("Authenticating with YouTube...");
-    let hub = auth::create_youtube_client().await?;
+    let video_hint = ytchat_webview::extract_video_id(&cli.url).ok_or_else(|| {
+        anyhow::anyhow!("invalid YouTube URL/video ID; expected an 11-char video id")
+    })?;
+    let title = format!("YouTube Live Chat - {video_hint}");
 
-    // 3. Get stream info and user's handle
-    eprintln!("Connecting to stream...");
-    let stream_info = youtube::get_stream_info(&hub, &video_id).await?;
-    let my_username = match cli.username {
-        Some(u) => u,
-        None => youtube::get_my_handle(&hub).await.unwrap_or_default(),
+    let mut app = App::new(title, video_hint, cli.username.unwrap_or_default());
+
+    let debug_log_path = if debug_enabled {
+        Some(
+            cli.debug_log
+                .clone()
+                .unwrap_or_else(|| std::env::temp_dir().join("streamchat-debug.log")),
+        )
+    } else {
+        None
     };
-    eprintln!("Connected to: {} - {}", stream_info.channel_name, stream_info.title);
 
-    // 4. Initialize app state
-    let title = format!("{} - {}", stream_info.channel_name, stream_info.title);
-    let live_chat_id = stream_info.live_chat_id;
-    let mut app = App::new(title, live_chat_id.clone(), my_username);
+    if let Some(path) = &debug_log_path {
+        eprintln!("debug logs -> {}", path.display());
+    }
 
-    // 5. Setup terminal
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // 6. Create event handler and message sender
-    // We need to create a second hub for the message sender since YouTube client isn't Clone
-    let hub2 = auth::create_youtube_client().await?;
+    let profile_dir = if cli.ephemeral {
+        None
+    } else {
+        cli.profile_dir.or_else(ytchat_webview::default_profile_dir)
+    };
 
-    let mut events = EventHandler::new(hub, live_chat_id.clone());
-    let sender = MessageSender::new(hub2, live_chat_id, events.sender());
+    let mut events = match EventHandler::new(
+        &cli.url,
+        cli.headless,
+        cli.timeout,
+        debug_enabled,
+        profile_dir,
+        debug_log_path,
+    ) {
+        Ok(events) => events,
+        Err(err) => {
+            disable_raw_mode()?;
+            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+            return Err(err);
+        }
+    };
 
-    // 7. Main loop
-    let result = run_app(&mut terminal, &mut app, &mut events, &sender).await;
+    let result = run_app(&mut terminal, &mut app, &mut events).await;
 
-    // 8. Cleanup terminal
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    events.shutdown();
 
     result
 }
@@ -81,28 +128,32 @@ async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     app: &mut App,
     events: &mut EventHandler,
-    sender: &MessageSender,
 ) -> Result<()> {
     loop {
-        // Render UI
         terminal.draw(|frame| ui::render(frame, app))?;
 
-        // Handle events
         if let Some(event) = events.next().await {
             match event {
                 AppEvent::Key(key) => {
                     if let Some(action) = app.handle_key(key) {
                         match action {
-                            AppAction::SendMessage(msg) => {
+                            AppAction::SendMessage(message) => {
                                 app.is_sending = true;
                                 app.error_message = None;
-                                sender.send(msg);
+                                if let Err(err) = events.send_message(message) {
+                                    app.error_message =
+                                        Some(format!("Failed to queue message send: {err}"));
+                                    app.is_sending = false;
+                                }
                             }
                         }
                     }
                 }
                 AppEvent::NewMessages(messages) => {
                     app.add_messages(messages);
+                }
+                AppEvent::Resize => {
+                    terminal.autoresize()?;
                 }
                 AppEvent::MessageSent => {
                     app.is_sending = false;

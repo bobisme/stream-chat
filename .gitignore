@@ -1,4 +1,5 @@
 /target
+target/
 
 # Prevent accidental commit of secrets
 client_secret*.json

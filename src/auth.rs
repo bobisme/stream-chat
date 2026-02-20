@@ -9,8 +9,9 @@ use google_youtube3::{
     YouTube,
 };
 use std::path::PathBuf;
+use std::sync::Arc;
 
-pub type YouTubeClient = YouTube<HttpsConnector<HttpConnector>>;
+pub type YouTubeClient = Arc<YouTube<HttpsConnector<HttpConnector>>>;
 
 /// Create an authenticated YouTube client
 pub async fn create_youtube_client() -> Result<YouTubeClient> {
@@ -41,7 +42,7 @@ pub async fn create_youtube_client() -> Result<YouTubeClient> {
     );
 
     // Create YouTube hub
-    Ok(YouTube::new(client, auth))
+    Ok(Arc::new(YouTube::new(client, auth)))
 }
 
 fn load_client_secret() -> Result<ApplicationSecret> {
