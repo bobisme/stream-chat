@@ -2,6 +2,8 @@
 
 Terminal YouTube live chat client powered by an embedded WebView (no YouTube Data API key required).
 
+![streamchat screenshot](images/shot.webp)
+
 ## What it does
 
 - Reads live chat messages from YouTube chat popout DOM.
